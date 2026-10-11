@@ -8,7 +8,13 @@
      хранится ТОЛЬКО на устройстве пользователя, прокси их не сохраняет;
    - прямой API по токену (если вуз включит сервис moodle_mobile_app).
 
-   Прокси не имеет состояния: в журнал пишутся только метод, путь и код.
+   Логи: только метаданные — метод, путь, код, время, размер, IP.
+   Пароли, cookie и тела запросов НЕ логируются.
+
+   Переменные окружения:
+   - PORT            порт (Render подставляет сам)
+   - LOG_LEVEL       debug | info | warn | error (по умолчанию info)
+   - HEARTBEAT_MS    период пульса в журнал, мс (по умолчанию 600000)
    ============================================================ */
 
 const http = require("http");
@@ -20,6 +26,9 @@ const PORT = Number(process.env.PORT || 3000);
 const ROOT = path.join(__dirname, "..");
 const TIMEOUT_MS = 25000;
 
+const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
+const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 600000);
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -30,7 +39,60 @@ const MIME = {
   ".ico": "image/x-icon",
 };
 
+/* CORS: авторизация передаётся в теле запроса, а не в cookie,
+   поэтому Access-Control-Allow-Credentials не нужен. */
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 const REDIRECT_CODES = [301, 302, 303, 307, 308];
+
+/* ---------- Журнал ---------- */
+
+const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
+const MIN_LEVEL = LEVELS[LOG_LEVEL] || LEVELS.info;
+
+function log(level, tag, message) {
+  if ((LEVELS[level] || 0) < MIN_LEVEL) return;
+  const line = `[${new Date().toISOString()}] ${level.toUpperCase().padEnd(5)} [${tag}] ${message}`;
+  if (level === "error" || level === "warn") console.error(line);
+  else console.log(line);
+}
+
+const stats = {
+  started: Date.now(),
+  requests: 0,
+  errors: 0,
+  moodleCalls: 0,
+  logins: 0,
+  loginsFailed: 0,
+};
+
+let reqSeq = 0;
+function nextReqId() {
+  reqSeq += 1;
+  return reqSeq.toString(36).padStart(3, "0") + Math.random().toString(36).slice(2, 5);
+}
+
+function fmtDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return String(forwarded).split(",")[0].trim();
+  return req.socket.remoteAddress || "-";
+}
+
+function shortUrl(url) {
+  return String(url).startsWith(MOODLE_URL) ? String(url).slice(MOODLE_URL.length) || "/" : String(url);
+}
 
 /* ---------- Работа с cookie ---------- */
 
@@ -65,15 +127,38 @@ function absorbCookies(res, jar) {
 
 /* ---------- Запросы к Moodle ---------- */
 
-async function moodleFetch(url, options, jar) {
+async function moodleFetch(url, options, jar, label) {
+  const method = options.method || "GET";
+  const started = Date.now();
   const headers = Object.assign({}, options.headers || {});
   const cookie = jarToString(jar);
   if (cookie) headers.Cookie = cookie;
   const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout
     ? AbortSignal.timeout(TIMEOUT_MS)
     : undefined;
-  const res = await fetch(url, Object.assign({}, options, { headers, redirect: "manual", signal }));
+
+  log("debug", "moodle", `→ ${method} ${shortUrl(url)}`);
+
+  let res;
+  try {
+    res = await fetch(url, Object.assign({}, options, { headers, redirect: "manual", signal }));
+  } catch (err) {
+    stats.errors += 1;
+    const reason = err.name === "TimeoutError" || err.name === "AbortError"
+      ? `таймаут ${TIMEOUT_MS}мс`
+      : err.message;
+    log("warn", "moodle", `✗ ${method} ${shortUrl(url)} — ${reason} (${Date.now() - started}мс)`);
+    throw err;
+  }
+
   absorbCookies(res, jar);
+  stats.moodleCalls += 1;
+  const ms = Date.now() - started;
+
+  log(ms > 5000 ? "warn" : "debug", "moodle",
+    `← ${res.status} ${method} ${shortUrl(url)} ${ms}мс cookie=${Object.keys(jar).length}` +
+    (ms > 5000 ? " (медленно)" : ""));
+
   return res;
 }
 
@@ -93,10 +178,10 @@ function extractLoginError(html) {
   return null;
 }
 
-/* ---------- Раздача статики ---------- */
+/* ---------- Ответы и статика ---------- */
 
 function sendJson(res, code, obj) {
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(code, Object.assign({ "Content-Type": "application/json; charset=utf-8" }, CORS));
   res.end(JSON.stringify(obj));
 }
 
@@ -114,18 +199,20 @@ function serveStatic(req, res, pathname) {
   let filePath = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
   filePath = path.normalize(path.join(ROOT, filePath));
   if (!filePath.startsWith(ROOT)) {
-    res.writeHead(403);
+    log("warn", "static", `#${req.id} отказ: путь вне каталога (${pathname})`);
+    res.writeHead(403, CORS);
     res.end();
     return;
   }
   fs.readFile(filePath, (err, buffer) => {
     if (err) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      log("warn", "static", `#${req.id} 404 ${pathname}`);
+      res.writeHead(404, Object.assign({ "Content-Type": "text/plain; charset=utf-8" }, CORS));
       res.end("Not found");
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.writeHead(200, Object.assign({ "Content-Type": MIME[ext] || "application/octet-stream" }, CORS));
     res.end(buffer);
   });
 }
@@ -134,19 +221,23 @@ function serveStatic(req, res, pathname) {
 
 async function handleSessionLogin(req, res) {
   const { username, password } = await readBody(req);
+  stats.logins += 1;
+
   if (!username || !password) {
-    console.log("POST /api/session/login -> 400");
+    req.note("warn", "логин: не переданы логин или пароль");
     return sendJson(res, 400, { error: "Укажите логин и пароль" });
   }
 
+  req.note("info", `логин: попытка, пользователь «${username}»`);
   const jar = {};
 
   /* 1. Берём форму входа и logintoken */
-  const pageRes = await moodleFetch(`${MOODLE_URL}/login/index.php`, { method: "GET" }, jar);
+  const pageRes = await moodleFetch(`${MOODLE_URL}/login/index.php`, { method: "GET" }, jar, "форма входа");
   const pageHtml = await pageRes.text();
   const tokenMatch = /name="logintoken"\s+value="([^"]+)"/.exec(pageHtml);
   if (!tokenMatch) {
-    console.log("POST /api/session/login -> 502 (нет logintoken)");
+    stats.errors += 1;
+    req.note("error", "логин: Moodle не вернул форму входа (нет logintoken)");
     return sendJson(res, 502, { error: "Moodle не вернул форму входа" });
   }
 
@@ -164,7 +255,8 @@ async function handleSessionLogin(req, res) {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form,
     },
-    jar
+    jar,
+    "отправка формы"
   );
   let html = response.status === 200 ? await response.text() : "";
 
@@ -177,35 +269,39 @@ async function handleSessionLogin(req, res) {
     const target = /^https?:/i.test(location)
       ? location
       : MOODLE_URL + (location.startsWith("/") ? "" : "/") + location;
-    response = await moodleFetch(target, { method: "GET" }, jar);
+    req.note("debug", `логин: редирект ${hops + 1} → ${shortUrl(target)}`);
+    response = await moodleFetch(target, { method: "GET" }, jar, "редирект");
     hops++;
     if (response.status === 200) html = await response.text();
   }
 
   /* 4. Проверяем, что сессия действительно авторизована */
-  const checkRes = await moodleFetch(`${MOODLE_URL}/my/`, { method: "GET" }, jar);
+  const checkRes = await moodleFetch(`${MOODLE_URL}/my/`, { method: "GET" }, jar, "проверка сессии");
   const checkHtml = await checkRes.text();
   const loggedIn = !/name="logintoken"/.test(checkHtml) && /"sesskey"/.test(checkHtml);
 
   if (loggedIn) {
-    console.log(`POST /api/session/login -> 200 (вход выполнен, редиректов ${hops})`);
+    req.note("info", `логин: успех, пользователь «${username}», редиректов ${hops}, cookie ${Object.keys(jar).length}`);
     return sendJson(res, 200, { cookies: jarToString(jar) });
   }
 
+  stats.loginsFailed += 1;
   const message = extractLoginError(html || checkHtml) || "Неверный логин или пароль";
-  console.log("POST /api/session/login -> 401");
+  req.note("warn", `логин: отказ для «${username}» — ${message}`);
   return sendJson(res, 401, { error: message });
 }
 
 async function handleSessionPage(req, res) {
   const { cookies, path: pagePath } = await readBody(req);
   if (!pagePath || !pagePath.startsWith("/") || pagePath.includes("://")) {
+    req.note("warn", `страница: некорректный путь «${pagePath}»`);
     return sendJson(res, 400, { error: "Некорректный путь" });
   }
   const jar = parseCookieString(cookies);
-  const pageRes = await moodleFetch(`${MOODLE_URL}${pagePath}`, { method: "GET" }, jar);
+  req.note("debug", `страница: cookie ${Object.keys(jar).length}`);
+  const pageRes = await moodleFetch(`${MOODLE_URL}${pagePath}`, { method: "GET" }, jar, "страница");
   const html = await pageRes.text();
-  console.log(`POST /api/session/page (${pagePath}) -> ${pageRes.status}`);
+  req.note("info", `страница ${pagePath} → ${pageRes.status}, ${html.length} символов`);
   return sendJson(res, 200, { html, cookies: jarToString(jar), status: pageRes.status });
 }
 
@@ -240,7 +336,7 @@ async function respondWithPage(res, response, jar, label) {
 
   if (contentType.includes("text/html")) {
     const html = await response.text();
-    console.log(`${label} (страница) -> ${response.status}`);
+    log("info", "app", `${label}: страница → ${response.status}, ${html.length} символов`);
     return sendJson(res, 200, {
       kind: "html",
       html,
@@ -253,7 +349,7 @@ async function respondWithPage(res, response, jar, label) {
   const buffer = Buffer.from(await response.arrayBuffer());
   const limit = 15 * 1024 * 1024;
   if (buffer.length > limit) {
-    console.log(`${label} (файл слишком велик) -> ${buffer.length} байт`);
+    log("warn", "app", `${label}: файл слишком велик — ${(buffer.length / 1048576).toFixed(1)} МБ`);
     return sendJson(res, 200, {
       kind: "file",
       tooLarge: true,
@@ -264,7 +360,7 @@ async function respondWithPage(res, response, jar, label) {
     });
   }
 
-  console.log(`${label} (файл ${buffer.length} байт) -> ${response.status}`);
+  log("info", "app", `${label}: файл «${filename || "без имени"}», ${(buffer.length / 1024).toFixed(1)} КБ, ${contentType || "тип неизвестен"}`);
   return sendJson(res, 200, {
     kind: "file",
     filename,
@@ -284,8 +380,11 @@ async function followRedirects(response, jar, maxHops) {
     const target = /^https?:/i.test(location)
       ? location
       : MOODLE_URL + (location.startsWith("/") ? "" : "/") + location;
-    response = await moodleFetch(target, { method: "GET" }, jar);
+    response = await moodleFetch(target, { method: "GET" }, jar, "редирект");
     hops++;
+  }
+  if (hops >= maxHops && REDIRECT_CODES.includes(response.status)) {
+    log("warn", "moodle", `цепочка редиректов не закончилась за ${maxHops} шагов`);
   }
   return response;
 }
@@ -294,22 +393,26 @@ async function followRedirects(response, jar, maxHops) {
 async function handleSessionOpen(req, res) {
   const { cookies, url } = await readBody(req);
   if (!url || !/^https?:\/\//i.test(url)) {
+    req.note("warn", `открытие: некорректный адрес «${url}»`);
     return sendJson(res, 400, { error: "Некорректный адрес" });
   }
   /* Разрешаем обращаться только к тому же сайту Moodle */
   if (!url.startsWith(MOODLE_URL)) {
+    req.note("warn", `открытие: адрес вне сайта Moodle — ${url}`);
     return sendJson(res, 400, { error: "Адрес вне сайта Moodle" });
   }
 
+  req.note("info", `открытие: ${shortUrl(url)}`);
   const jar = parseCookieString(cookies);
-  const response = await followRedirects(await moodleFetch(url, { method: "GET" }, jar), jar, 5);
-  return respondWithPage(res, response, jar, "POST /api/session/open");
+  const response = await followRedirects(await moodleFetch(url, { method: "GET" }, jar, "открытие"), jar, 5);
+  return respondWithPage(res, response, jar, `открытие ${shortUrl(url)}`);
 }
 
 /* Отправка формы (прохождение тестов): поля пересылаются в Moodle как есть */
 async function handleSessionSubmit(req, res) {
   const { cookies, action, fields = {} } = await readBody(req);
   if (!action || !action.startsWith(MOODLE_URL)) {
+    req.note("warn", `отправка формы: некорректный адрес «${action}»`);
     return sendJson(res, 400, { error: "Некорректный адрес формы" });
   }
 
@@ -319,6 +422,8 @@ async function handleSessionSubmit(req, res) {
     else form.append(key, String(value));
   }
 
+  req.note("info", `отправка формы: ${shortUrl(action)}, полей ${Object.keys(fields).length}`);
+
   const jar = parseCookieString(cookies);
   let response = await moodleFetch(
     action,
@@ -327,15 +432,17 @@ async function handleSessionSubmit(req, res) {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form,
     },
-    jar
+    jar,
+    "отправка формы"
   );
   response = await followRedirects(response, jar, 6);
-  return respondWithPage(res, response, jar, `POST /api/session/submit (${action.split("/").pop()})`);
+  return respondWithPage(res, response, jar, `отправка ${shortUrl(action)}`);
 }
 
 async function handleSessionAjax(req, res) {
   const { cookies, sesskey, methodname, args = {} } = await readBody(req);
   if (!sesskey || !methodname) {
+    req.note("warn", "ajax: не переданы sesskey или methodname");
     return sendJson(res, 400, { error: "Нужны sesskey и methodname" });
   }
   const jar = parseCookieString(cookies);
@@ -348,7 +455,8 @@ async function handleSessionAjax(req, res) {
       headers: { "Content-Type": "application/json" },
       body,
     },
-    jar
+    jar,
+    `ajax ${methodname}`
   );
   let data;
   try {
@@ -356,13 +464,51 @@ async function handleSessionAjax(req, res) {
   } catch (e) {
     data = { error: `Moodle вернул не-JSON ответ (HTTP ${ajaxRes.status})` };
   }
-  console.log(`POST /api/session/ajax (${methodname}) -> ${ajaxRes.status}`);
+  req.note("info", `ajax ${methodname} → ${ajaxRes.status}`);
   return sendJson(res, 200, { data, cookies: jarToString(jar) });
 }
+
+/* ---------- Сервер ---------- */
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const pathname = url.pathname;
+
+  req.id = nextReqId();
+  req.ip = clientIp(req);
+  req.note = (level, message) => log(level, "app", `#${req.id} ${message}`);
+
+  const started = Date.now();
+  let bytes = 0;
+  const originalEnd = res.end.bind(res);
+  res.end = function (chunk, ...rest) {
+    if (chunk) bytes += Buffer.byteLength(chunk);
+    return originalEnd(chunk, ...rest);
+  };
+
+  stats.requests += 1;
+  res.setHeader("X-Request-Id", req.id);
+
+  res.on("finish", () => {
+    const ms = Date.now() - started;
+    const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+    log(level, "http",
+      `#${req.id} ${req.method} ${pathname} → ${res.statusCode} ${ms}мс ${bytes}б ip=${req.ip}`);
+  });
+
+  res.on("close", () => {
+    if (!res.writableFinished) {
+      log("warn", "http", `#${req.id} ${req.method} ${pathname} — соединение оборвано клиентом`);
+    }
+  });
+
+  /* Предварительный запрос браузера перед POST с JSON.
+     Без него запрос к прокси с другого домена блокируется. */
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, CORS);
+    res.end();
+    return;
+  }
 
   try {
     if (req.method === "POST" && pathname === "/api/session/login") {
@@ -391,10 +537,11 @@ const server = http.createServer(async (req, res) => {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ username, password, service: "moodle_mobile_app" }),
         },
-        jar
+        jar,
+        "получение токена"
       );
       const data = await result.json().catch(() => ({ error: "Не-JSON ответ Moodle" }));
-      console.log(`POST /api/login -> ${result.status}`);
+      req.note("info", `токен: ${result.status}`);
       return sendJson(res, result.status, data);
     }
     if (req.method === "POST" && pathname === "/api/ws") {
@@ -409,26 +556,69 @@ const server = http.createServer(async (req, res) => {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams(form),
         },
-        jar
+        jar,
+        `ws ${wsfunction}`
       );
       const data = await result.json().catch(() => ({ error: "Не-JSON ответ Moodle" }));
-      console.log(`POST /api/ws (${wsfunction}) -> ${result.status}`);
+      req.note("info", `ws ${wsfunction} → ${result.status}`);
       return sendJson(res, result.status, data);
+    }
+
+    if (req.method === "GET" && pathname === "/__health") {
+      return sendJson(res, 200, {
+        ok: true,
+        uptime: Math.round((Date.now() - stats.started) / 1000),
+        requests: stats.requests,
+        moodleCalls: stats.moodleCalls,
+        errors: stats.errors,
+        logins: stats.logins,
+        loginsFailed: stats.loginsFailed,
+        rss: Math.round(process.memoryUsage().rss / 1048576),
+      });
     }
 
     if (req.method === "GET" || req.method === "HEAD") {
       return serveStatic(req, res, pathname);
     }
 
-    res.writeHead(405);
+    req.note("warn", `метод ${req.method} не поддерживается`);
+    res.writeHead(405, CORS);
     res.end();
   } catch (err) {
-    console.error(`${req.method} ${pathname} -> ошибка:`, err.message);
+    stats.errors += 1;
+    log("error", "app", `#${req.id} ${req.method} ${pathname} — ${err.message}`);
+    if (err.stack) log("debug", "app", err.stack.split("\n").slice(1, 4).join(" | "));
     sendJson(res, 502, { error: "Не удалось выполнить запрос к Moodle" });
   }
 });
 
+/* Пульс: раз в 10 минут пишем, что сервис жив */
+const heartbeat = setInterval(() => {
+  const rss = Math.round(process.memoryUsage().rss / 1048576);
+  log("info", "heartbeat",
+    `uptime=${fmtDuration(Date.now() - stats.started)} запросов=${stats.requests} ` +
+    `moodle=${stats.moodleCalls} ошибок=${stats.errors} память=${rss}МБ`);
+}, HEARTBEAT_MS);
+if (typeof heartbeat.unref === "function") heartbeat.unref();
+
+process.on("unhandledRejection", (reason) => {
+  stats.errors += 1;
+  log("error", "process", `необработанный отказ промиса: ${reason}`);
+});
+
+process.on("uncaughtException", (err) => {
+  stats.errors += 1;
+  log("error", "process", `непойманное исключение: ${err.message}`);
+});
+
+process.on("SIGTERM", () => {
+  log("info", "process", "получен SIGTERM — Render перезапускает сервис, завершаюсь");
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000);
+});
+
 server.listen(PORT, () => {
-  console.log(`Прототип запущен: http://localhost:${PORT}`);
-  console.log("Прокси без состояния: пароли, cookie и токены не сохраняются.");
+  log("info", "start", `сервис запущен на порту ${PORT}`);
+  log("info", "start", `Node ${process.version}, каталог статики ${ROOT}`);
+  log("info", "start", `Moodle: ${MOODLE_URL}, уровень журнала ${LOG_LEVEL}, пульс ${HEARTBEAT_MS / 1000}с`);
 });
