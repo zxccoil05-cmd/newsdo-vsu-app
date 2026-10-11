@@ -19,7 +19,7 @@ window.APP_CONFIG = {
 
   // Адрес прокси. Локальный: node proxy/local-proxy.js -> http://localhost:3000
   // После деплоя Cloudflare Worker: https://<имя>.<субдомен>.workers.dev
-  PROXY_URL: "https://newsdo-vsu-app.onrender.com/",
+  PROXY_URL: "https://newsdo-vsu-app.onrender.com:10000/",
 
   // Внутренние страницы Moodle, которые использует сессионный режим
   PATHS: {
