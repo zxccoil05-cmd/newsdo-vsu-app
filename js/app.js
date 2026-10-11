@@ -97,8 +97,12 @@
     quizTimerId: null,
     heartbeatId: null,
     lastPingAt: 0,
-    autoLoginDone: false,
   };
+
+  /* Автовход: ограниченное число попыток, чтобы не уйти в цикл */
+  let autoLoginAttempts = 0;
+  const AUTO_LOGIN_MAX = 2;
+  let lastLoginAt = 0;
 
   /* Moodle у ВГУ завершает сессию после 30 минут без активности.
      Пока приложение открыто, продлеваем её лёгким запросом. */
@@ -334,7 +338,7 @@
     }
   }
 
-  /* Сессия закончилась — показываем понятное сообщение */
+  /* Сессия закончилась — показываем понятное сообщение и пробуем автовход */
   async function expireSession(message) {
     stopHeartbeat();
     clearQuizTimer();
@@ -357,7 +361,7 @@
     loginNotice.classList.remove("hidden");
     show(viewLogin);
 
-    /* Если пароль сохранён — пробуем войти автоматически */
+    /* Пароль сохранён — входим автоматически */
     refreshForgetRow();
     await tryAutoLogin();
   }
@@ -377,9 +381,10 @@
   }
 
   async function tryAutoLogin() {
-    if (state.autoLoginDone) return false;
-    state.autoLoginDone = true;
     if (state.mode !== "session") return false;
+    if (autoLoginAttempts >= AUTO_LOGIN_MAX) return false;
+    /* Только что входили — значит, дело не в пароле, не зацикливаемся */
+    if (Date.now() - lastLoginAt < 10000) return false;
 
     let saved = null;
     try {
@@ -389,21 +394,24 @@
     }
     if (!saved || !saved.username || !saved.password) return false;
 
+    autoLoginAttempts += 1;
     loginUsername.value = saved.username;
-    loginPassword.value = saved.password;
     show(viewLogin);
     setLoginLoading(true);
+
     try {
-      await MoodleApi.session.login(saved.username, saved.password);
-      await Storage.setUsername(saved.username);
-      loginPassword.value = "";
+      /* Старые cookie мёртвой сессии только мешают — убираем */
+      try {
+        await MoodleApi.session.clear();
+      } catch (e) {
+        /* ignore */
+      }
+      await performLogin(saved.username, saved.password, { remember: true });
       loginNotice.textContent = "Выполнен автоматический вход по сохранённым данным.";
       loginNotice.classList.remove("hidden");
-      await loadHome();
       return true;
     } catch (err) {
       loginPassword.value = "";
-      loginRemember.checked = true;
       loginNotice.textContent = "Автовход не удался: " + friendlyError(err) +
         " Проверь логин и пароль.";
       loginNotice.classList.remove("hidden");
@@ -415,6 +423,34 @@
 
   /* ---------- Главный экран ---------- */
   async function loadHome() {
+    /* Сначала убеждаемся, что вход действительно жив.
+       Moodle отдаёт форму входа с кодом 200, поэтому исключения
+       может и не быть — проверяем сам объект профиля. */
+    let info = null;
+    try {
+      info = state.mode === "session"
+        ? await MoodleApi.session.siteInfo()
+        : await MoodleApi.token.siteInfo(state.token);
+    } catch (err) {
+      if (isSessionExpired(err)) return await expireSession();
+      /* прочие ошибки не должны мешать показать кабинет */
+    }
+
+    const alive = info && (info.userid || (info.fullname && String(info.fullname).trim()));
+    if (!alive) {
+      return await expireSession("Сессия истекла. Выполняю вход заново…");
+    }
+
+    state.user = info;
+    const name = info.fullname;
+    if (name) {
+      homeGreeting.textContent = `Здравствуйте, ${name}`;
+      elTopbarUser.textContent = name;
+    }
+    if (info.avatar) loadAvatar(info.avatar);
+    state.lastPingAt = Date.now();
+    startHeartbeat();
+
     show(viewHome);
     homeDate.textContent = fmtDateLong.format(new Date());
     coursesList.innerHTML = "";
@@ -423,23 +459,6 @@
     coursesLoaderPanel.classList.remove("hidden");
     deadlinesLoader.classList.remove("hidden");
     deadlinesEmpty.classList.add("hidden");
-
-    try {
-      const info = state.mode === "session"
-        ? await MoodleApi.session.siteInfo()
-        : await MoodleApi.token.siteInfo(state.token);
-      state.user = info;
-      const name = info && info.fullname;
-      if (name) {
-        homeGreeting.textContent = `Здравствуйте, ${name}`;
-        elTopbarUser.textContent = name;
-      }
-      if (info && info.avatar) loadAvatar(info.avatar);
-      state.lastPingAt = Date.now();
-      startHeartbeat();
-    } catch (err) {
-      if (isSessionExpired(err)) return await expireSession();
-    }
 
     try {
       const courses = state.mode === "session"
@@ -795,7 +814,7 @@
   }
 
   function handleMaterialError(err) {
-    if (isSessionExpired(err)) return void logout();
+    if (isSessionExpired(err)) return void expireSession();
     materialNotice.textContent = friendlyError(err);
     materialNotice.classList.remove("hidden");
   }
@@ -1053,6 +1072,38 @@
   }
 
   /* ---------- Вход / выход ---------- */
+
+  /* Общая процедура входа: используется и формой, и автовходом */
+  async function performLogin(username, password, options) {
+    const opts = options || {};
+    const remember = !!opts.remember;
+
+    if (state.mode === "session") {
+      await MoodleApi.session.login(username, password);
+      await Storage.setUsername(username);
+      if (remember) {
+        await Storage.setCredentials(username, password);
+      } else {
+        await Storage.clearCredentials();
+      }
+      refreshForgetRow();
+    } else {
+      const result = await MoodleApi.token.login(username, password);
+      state.token = result.token;
+      await Storage.setToken(result.token);
+    }
+
+    lastLoginAt = Date.now();
+
+    try {
+      sessionStorage.removeItem(AVATAR_CACHE_KEY);
+    } catch (e) {
+      /* ignore */
+    }
+
+    await loadHome();
+  }
+
   async function handleLogin(event) {
     event.preventDefault();
     clearLoginError();
@@ -1066,30 +1117,9 @@
 
     setLoginLoading(true);
     try {
-      if (state.mode === "session") {
-        await MoodleApi.session.login(username, password);
-        await Storage.setUsername(username);
-        state.autoLoginDone = true;
-        /* Галочка «входить автоматически» — сохраняем или стираем данные */
-        if (loginRemember.checked) {
-          await Storage.setCredentials(username, password);
-        } else {
-          await Storage.clearCredentials();
-        }
-        refreshForgetRow();
-      } else {
-        const result = await MoodleApi.token.login(username, password);
-        state.token = result.token;
-        await Storage.setToken(result.token);
-      }
+      await performLogin(username, password, { remember: loginRemember.checked });
       loginPassword.value = "";
       loginNotice.classList.add("hidden");
-      try {
-        sessionStorage.removeItem(AVATAR_CACHE_KEY);
-      } catch (e) {
-        /* ignore */
-      }
-      await loadHome();
     } catch (err) {
       showLoginError(friendlyError(err));
     } finally {
