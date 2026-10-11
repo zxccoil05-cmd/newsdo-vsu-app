@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e8ecf5">
+  <title>СДО ВГУ</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a5bd7'/%3E%3Ctext x='16' y='22' font-family='Georgia' font-size='17' fill='%23ffffff' text-anchor='middle'%3EВ%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Фон: мягкие блики, по которым «преломляется» стекло -->
+<div class="backdrop" aria-hidden="true">
+  <span class="blob blob--a"></span>
+  <span class="blob blob--b"></span>
+  <span class="blob blob--c"></span>
+</div>
+
+<!-- Набор иконок (единый штриховой стиль) -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6h.09A1.7 1.7 0 0 0 10.1 3.04V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.56 1.01H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 1.5v2.2M12 20.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M1.5 12h2.2M20.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8.5 21h7M12 17v4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21.5 2.5 10.8 13.2"/><path d="M21.5 2.5 14.8 21.5l-4-8.3-8.3-4z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 4h5.5A3.5 3.5 0 0 1 12 7.5V20a2.6 2.6 0 0 0-2.6-2.6H3z"/><path d="M21 4h-5.5A3.5 3.5 0 0 0 12 7.5V20a2.6 2.6 0 0 1 2.6-2.6H21z"/></symbol>
+  <symbol id="i-check-square" viewBox="0 0 24 24"><path d="M9 11l3 3L21 5"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1.4"/><path d="M8.5 12h7M8.5 16h4.5"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4.5 4V5.5A2.5 2.5 0 0 1 6 3h12.5A2.5 2.5 0 0 1 21 5.5z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M13.5 2.5H7a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M13.5 2.5V8H19"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M13.5 2.5H7a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M13.5 2.5V8H19M8.5 13h7M8.5 17h4.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M21 18.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2h4.6l2 3H19a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13.5a5 5 0 0 0 7.5.5l2.5-2.5a5 5 0 0 0-7-7l-1.4 1.4"/><path d="M14 10.5a5 5 0 0 0-7.5-.5L4 12.5a5 5 0 0 0 7 7l1.4-1.4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="17" rx="2.5"/><circle cx="8.5" cy="9" r="1.6"/><path d="M21 16l-5-5-9 9.5"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="M22 8.5 16 12l6 3.5z"/><rect x="2" y="5.5" width="14" height="13" rx="2.5"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M11 5.5 6.5 9H3v6h3.5L11 18.5z"/><path d="M15.5 9.5a3.6 3.6 0 0 1 0 5M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path d="M20.5 8v11.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5V8"/><rect x="2.5" y="3.5" width="19" height="4.5" rx="1.4"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.2"/><path d="M3 9.5h18M3 15h18M9.5 9.5V20M15 9.5V20"/></symbol>
+  <symbol id="i-slides" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8.5 20h7M7.5 12l3-3.2 2.4 2.4L16.5 7.6"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4.5V10h-5.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7.5" r="4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10.5" rx="2.4"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 10 18 19.5 6.5"/></symbol>
+  <symbol id="i-question" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 1 1 3.6 2.6c-.7.3-1 .9-1 1.6v.4M12 17v.2"/></symbol>
+  <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="6"/><path d="M8.5 13.8 7 22l5-2.6 5 2.6-1.5-8.2"/></symbol>
+  <symbol id="i-stack" viewBox="0 0 24 24"><path d="M12 3 3 7.5 12 12l9-4.5z"/><path d="M3 12.5 12 17l9-4.5M3 17 12 21.5 21 17"/></symbol>
+</svg>
+
+<!-- Верхняя панель -->
+<header class="topbar hidden" id="topbar">
+  <div class="topbar__inner">
+    <div class="topbar__user">
+      <img class="avatar hidden" id="topbar-avatar" alt="">
+      <div class="topbar__names">
+        <span class="topbar__name" id="topbar-user"></span>
+        <span class="topbar__sub">СДО ВГУ</span>
+      </div>
+    </div>
+    <button class="iconbtn" id="btn-settings" type="button" aria-label="Настройки">
+      <svg class="icon" aria-hidden="true"><use href="#i-gear"></use></svg>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Вход -->
+  <section class="view" id="view-login">
+    <div class="auth">
+      <div class="auth__card panel">
+        <div class="auth__mark">
+          <svg class="icon icon--lg" aria-hidden="true"><use href="#i-book"></use></svg>
+        </div>
+        <h1 class="auth__title">СДО ВГУ</h1>
+        <p class="auth__subtitle">Дистанционное обучение ВГУ имени П.&nbsp;М.&nbsp;Машерова</p>
+        <p class="auth__notice hidden" id="login-notice"></p>
+
+        <form id="login-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="login-username">
+              <svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>
+              Логин
+            </label>
+            <input class="input" type="text" id="login-username" name="username"
+                   autocomplete="username" spellcheck="false" required>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="login-password">
+              <svg class="icon icon--sm" aria-hidden="true"><use href="#i-lock"></use></svg>
+              Пароль
+            </label>
+            <input class="input" type="password" id="login-password" name="password"
+                   autocomplete="current-password" required>
+          </div>
+
+          <label class="check" for="login-remember">
+            <input type="checkbox" id="login-remember">
+            <span class="check__box" aria-hidden="true">
+              <svg class="icon icon--sm"><use href="#i-check"></use></svg>
+            </span>
+            <span class="check__body">
+              <span class="check__title">Входить автоматически</span>
+              <span class="check__note">
+                Пароль будет сохранён на этом устройстве (в Telegram — в защищённом
+                хранилище CloudStorage) и использован для автовхода. Не включай
+                галочку на чужом устройстве.
+              </span>
+            </span>
+          </label>
+
+          <div class="auth__error hidden" id="login-error" role="alert"></div>
+
+          <button class="btn btn--primary btn--block" id="login-submit" type="submit">
+            <span class="btn__label">Войти</span>
+            <span class="btn__spinner hidden" aria-hidden="true"></span>
+          </button>
+        </form>
+
+        <p class="auth__note" id="auth-note">
+          Пароль не сохраняется, если не отмечена галочка «Входить автоматически»:
+          он отправляется напрямую в Moodle и используется один раз для создания
+          сессии. Сессия хранится только на этом устройстве.
+        </p>
+      </div>
+
+      <button class="linklike" id="login-author" type="button">
+        <svg class="icon icon--sm" aria-hidden="true"><use href="#i-send"></use></svg>
+        Автор: t.me/wch8h
+      </button>
+    </div>
+  </section>
+
+  <!-- Главная -->
+  <section class="view hidden" id="view-home">
+    <div class="hero panel">
+      <img class="hero__avatar hidden" id="home-avatar" alt="">
+      <div class="hero__text">
+        <h1 class="hero__title" id="home-greeting">Кабинет</h1>
+        <p class="hero__date" id="home-date"></p>
+      </div>
+    </div>
+
+    <section class="block">
+      <div class="block__head">
+        <h2 class="block__title">
+          <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg>
+          Ближайшие сроки
+        </h2>
+        <span class="block__hint" id="deadlines-note"></span>
+      </div>
+      <div class="panel panel--list">
+        <div class="deadlines" id="deadlines-list"></div>
+        <div class="empty hidden" id="deadlines-empty">На ближайшее время событий нет</div>
+        <div class="loader hidden" id="deadlines-loader">
+          <span class="loader__spin" aria-hidden="true"></span> Загрузка событий
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block__head">
+        <h2 class="block__title">
+          <svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg>
+          Курсы
+        </h2>
+        <span class="block__hint" id="courses-count"></span>
+      </div>
+      <div class="courses" id="courses-list"></div>
+      <div class="panel hidden" id="courses-loader-panel">
+        <div class="loader" id="courses-loader">
+          <span class="loader__spin" aria-hidden="true"></span> Загрузка курсов
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- Курс -->
+  <section class="view hidden" id="view-course">
+    <button class="backlink" id="course-back" type="button">
+      <svg class="icon icon--sm" aria-hidden="true"><use href="#i-back"></use></svg>
+      Все курсы
+    </button>
+    <div class="page-head">
+      <p class="page-head__kicker" id="course-code"></p>
+      <h1 class="page-head__title" id="course-title"></h1>
+    </div>
+
+    <section class="block">
+      <div class="block__head">
+        <h2 class="block__title">
+          <svg class="icon" aria-hidden="true"><use href="#i-stack"></use></svg>
+          Материалы и задания
+        </h2>
+        <span class="block__hint" id="assignments-count"></span>
+      </div>
+      <div class="panel panel--list">
+        <div class="rows" id="assignments-list"></div>
+        <div class="empty hidden" id="assignments-empty">В этом курсе материалов не найдено</div>
+        <div class="loader hidden" id="assignments-loader">
+          <span class="loader__spin" aria-hidden="true"></span> Загрузка курса
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- Материал / тест -->
+  <section class="view hidden" id="view-material">
+    <button class="backlink" id="material-back" type="button">
+      <svg class="icon icon--sm" aria-hidden="true"><use href="#i-back"></use></svg>
+      Назад
+    </button>
+
+    <div class="page-head">
+      <p class="page-head__kicker" id="material-kicker"></p>
+      <h1 class="page-head__title" id="material-title"></h1>
+    </div>
+
+    <div class="material-actions hidden" id="material-actions"></div>
+
+    <section class="block hidden" id="material-files-block">
+      <div class="block__head">
+        <h2 class="block__title">
+          <svg class="icon" aria-hidden="true"><use href="#i-folder"></use></svg>
+          Файлы
+        </h2>
+        <span class="block__hint" id="material-files-count"></span>
+      </div>
+      <div class="panel panel--list" id="material-files"></div>
+    </section>
+
+    <section class="block hidden" id="material-content-block">
+      <div class="block__head">
+        <h2 class="block__title">
+          <svg class="icon" aria-hidden="true"><use href="#i-file-text"></use></svg>
+          <span id="material-content-label">Содержание</span>
+        </h2>
+      </div>
+      <div class="panel">
+        <div class="content" id="material-content"></div>
+      </div>
+    </section>
+
+    <!-- Навигация по тесту: кнопки под вопросом и таблица вопросов -->
+    <section class="block hidden" id="material-quiz-block">
+      <div class="panel quizbar">
+        <div class="quizbar__nav">
+          <button class="btn btn--ghost" id="quiz-prev" type="button">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-back"></use></svg>
+            <span id="quiz-prev-label">Назад</span>
+          </button>
+          <span class="quizbar__timer hidden" id="quiz-timer-chip"></span>
+          <button class="btn btn--primary" id="quiz-next" type="button">
+            <span id="quiz-next-label">Далее</span>
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron"></use></svg>
+          </button>
+        </div>
+        <div class="quizbar__progress" id="quiz-progress"></div>
+        <div class="quizgrid" id="quiz-grid"></div>
+      </div>
+    </section>
+
+    <div class="panel" id="material-loader-panel">
+      <div class="loader hidden" id="material-loader">
+        <span class="loader__spin" aria-hidden="true"></span> Загрузка
+      </div>
+    </div>
+    <div class="notice hidden" id="material-notice"></div>
+  </section>
+
+</main>
+
+<footer class="footer hidden" id="footer">
+  <button class="linklike" id="footer-author" type="button">
+    <svg class="icon icon--sm" aria-hidden="true"><use href="#i-send"></use></svg>
+    t.me/wch8h
+  </button>
+  <span class="footer__note">Неофициальный клиент · личное использование</span>
+</footer>
+
+<!-- Настройки: нижний лист -->
+<div class="sheet-backdrop hidden" id="sheet-backdrop"></div>
+<aside class="sheet hidden" id="sheet-settings" role="dialog" aria-modal="true" aria-label="Настройки">
+  <div class="sheet__grab"></div>
+  <div class="sheet__head">
+    <h2 class="sheet__title">Настройки</h2>
+    <button class="iconbtn" id="sheet-close" type="button" aria-label="Закрыть">
+      <svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg>
+    </button>
+  </div>
+
+  <div class="setting">
+    <span class="setting__label">
+      <svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg>
+      Тема оформления
+    </span>
+    <div class="segmented" id="theme-switch" role="group" aria-label="Тема оформления">
+      <button class="segmented__item" type="button" data-theme-value="light">
+        <svg class="icon icon--sm" aria-hidden="true"><use href="#i-sun"></use></svg>
+        Светлая
+      </button>
+      <button class="segmented__item" type="button" data-theme-value="dark">
+        <svg class="icon icon--sm" aria-hidden="true"><use href="#i-moon"></use></svg>
+        Тёмная
+      </button>
+      <button class="segmented__item" type="button" data-theme-value="system">
+        <svg class="icon icon--sm" aria-hidden="true"><use href="#i-monitor"></use></svg>
+        Система
+      </button>
+    </div>
+  </div>
+
+  <button class="setting setting--row" id="settings-author" type="button">
+    <span class="setting__label">
+      <svg class="icon" aria-hidden="true"><use href="#i-send"></use></svg>
+      Связь с автором
+    </span>
+    <span class="setting__value">
+      t.me/wch8h
+      <svg class="icon icon--sm" aria-hidden="true"><use href="#i-external"></use></svg>
+    </span>
+  </button>
+
+  <button class="setting setting--row hidden" id="settings-forget" type="button">
+    <span class="setting__label">
+      <svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg>
+      Забыть сохранённый пароль
+    </span>
+    <span class="setting__value" id="settings-forget-state">автовход включён</span>
+  </button>
+
+  <button class="setting setting--row" id="settings-logout" type="button">
+    <span class="setting__label setting__label--danger">
+      <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg>
+      Выйти из аккаунта
+    </span>
+    <svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron"></use></svg>
+  </button>
+
+  <p class="sheet__note">
+    <svg class="icon icon--sm" aria-hidden="true"><use href="#i-info"></use></svg>
+    Неофициальный клиент СДО ВГУ. Данные не сохраняются на сервере.
+  </p>
+</aside>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="js/config.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/api.js"></script>
+<script src="js/session.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
